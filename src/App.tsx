@@ -1352,9 +1352,14 @@ export default function App() {
         <h1 className="font-display font-black text-4xl sm:text-6xl tracking-tight uppercase text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-pink-600 to-rose-600 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] mb-3">
           Vòng Quay May Mắn
         </h1>
-        <p className="font-designer text-2xl sm:text-3xl text-rose-600 font-bold tracking-wide drop-shadow-sm">
-          Thiết kế bởi: Thầy Nghiêm Hồng Quân - Giáo viên Trường THCS Hòa Phú
-        </p>
+        {/* Khung chữ chạy */}
+        <div className="max-w-3xl mx-auto bg-gradient-to-r from-rose-50 to-pink-50 border-2 border-rose-200 rounded-2xl p-3.5 shadow-md overflow-hidden relative">
+          <div className="w-full overflow-hidden whitespace-nowrap">
+            <div className="animate-marquee inline-block font-designer text-2xl sm:text-3xl text-rose-600 font-bold tracking-wide drop-shadow-xs">
+              Chào mừng các em đến với vòng quay may mắn. Chúc các em sẽ gặt hái được nhiều may mắn !
+            </div>
+          </div>
+        </div>
       </header>
 
       {/* Supabase Missing Table Banner */}
