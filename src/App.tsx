@@ -1405,7 +1405,7 @@ export default function App() {
         head: [["STT", subjectLabel, "Tổng điểm số", "Số câu tham gia"]],
         body: scoreboardBody.length > 0 ? scoreboardBody : [["-", "Chưa có dữ liệu", "-", "-"]],
         styles: { font: "Roboto", fontSize: 10 },
-        headStyles: { fillColor: [79, 70, 229] },
+        headStyles: { font: "Roboto", fillColor: [79, 70, 229] },
         theme: "striped"
       });
 
@@ -1426,7 +1426,7 @@ export default function App() {
         head: [["Thời gian", "Người tham gia", "Kết quả", "Câu hỏi", "Đáp án"]],
         body: historyBody.length > 0 ? historyBody : [["-", "-", "-", "Chưa có lượt quay nào", "-"]],
         styles: { font: "Roboto", fontSize: 9 },
-        headStyles: { fillColor: [16, 185, 129] }, // Green primary
+        headStyles: { font: "Roboto", fillColor: [16, 185, 129] }, // Green primary
         theme: "grid"
       });
 
