@@ -105,6 +105,8 @@ export default function App() {
   const [showAnswer, setShowAnswer] = useState<boolean>(false);
   const [showResultBox, setShowResultBox] = useState<boolean>(false);
   const [isAnswering, setIsAnswering] = useState<boolean>(false);
+  const [isStealing, setIsStealing] = useState<boolean>(false);
+  const [stealName, setStealName] = useState<string>("");
   
   const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
   const [studentScores, setStudentScores] = useState<Record<string, StudentScore>>({});
@@ -650,6 +652,8 @@ export default function App() {
     setShowResultBox(false);
     setIsAnswering(false);
     setShowAnswer(false);
+    setIsStealing(false);
+    setStealName("");
 
     const spinDuration = 4500 + Math.random() * 2000; // 4.5s to 6.5s
     const startRotation = rotationRef.current;
@@ -1094,6 +1098,106 @@ export default function App() {
     setHistoryData(updatedHistory);
     setShowAnswer(true);
     setIsAnswering(false);
+
+    // If "removeAfterWin" is checked, remove student/group from current list
+    let updatedNames = [...names];
+    let updatedInputText = inputText;
+    let updatedGroups = [...groups];
+    let updatedGroupInputText = groupInputText;
+
+    if (removeAfterWin && lastWinningIndex !== -1) {
+      setLastRemovedPerson(winnerName);
+      if (wheelMode === 'student') {
+        updatedNames = names.filter((_, idx) => idx !== lastWinningIndex);
+        setNames(updatedNames);
+        updatedInputText = updatedNames.join("\n");
+        setInputText(updatedInputText);
+      } else {
+        updatedGroups = groups.filter((_, idx) => idx !== lastWinningIndex);
+        setGroups(updatedGroups);
+        updatedGroupInputText = updatedGroups.join("\n");
+        setGroupInputText(updatedGroupInputText);
+      }
+    } else {
+      setLastRemovedPerson(null);
+    }
+
+    // Save to Supabase
+    saveSession(
+      currentSessionId,
+      updatedNames,
+      updatedInputText,
+      topic,
+      questionBankText,
+      removeAfterWin,
+      updatedScores,
+      updatedHistory,
+      updatedGroups,
+      updatedGroupInputText,
+      updatedGrpScores,
+      wheelMode
+    );
+  };
+
+  // --- Answer Scoring for Steal/Handover (Mất lượt / Nhường quyền) ---
+  const handleStealScoring = (isCorrect: boolean) => {
+    if (!stealName.trim()) {
+      alert("Vui lòng chọn hoặc nhập tên học sinh/nhóm trả lời thay.");
+      return;
+    }
+
+    const cleanThiefName = stealName.trim();
+    const pts = isCorrect ? 10 : 0;
+
+    let updatedScores = { ...studentScores };
+    let updatedGrpScores = { ...groupScores };
+
+    if (wheelMode === 'student') {
+      // Original winner gets +0 pts and +1 participation
+      updatedScores = {
+        ...studentScores,
+        [winnerName]: {
+          score: studentScores[winnerName]?.score || 0,
+          count: (studentScores[winnerName]?.count || 0) + 1
+        },
+        [cleanThiefName]: {
+          score: (studentScores[cleanThiefName]?.score || 0) + pts,
+          count: (studentScores[cleanThiefName]?.count || 0) + 1
+        }
+      };
+      setStudentScores(updatedScores);
+    } else {
+      // Original winner gets +0 pts and +1 participation
+      updatedGrpScores = {
+        ...groupScores,
+        [winnerName]: {
+          score: groupScores[winnerName]?.score || 0,
+          count: (groupScores[winnerName]?.count || 0) + 1
+        },
+        [cleanThiefName]: {
+          score: (groupScores[cleanThiefName]?.score || 0) + pts,
+          count: (groupScores[cleanThiefName]?.count || 0) + 1
+        }
+      };
+      setGroupScores(updatedGrpScores);
+    }
+
+    // Record History
+    const timeStr = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const ptsText = isCorrect ? "+10đ" : "0đ";
+    const historyItem: HistoryItem = {
+      name: `${wheelMode === 'group' ? '👥 ' : ''}${cleanThiefName} (trả lời thay ${winnerName})`,
+      question: currentQuestion?.question || "N/A",
+      answer: currentQuestion?.answer || "N/A",
+      score: ptsText,
+      time: timeStr
+    };
+
+    const updatedHistory = [historyItem, ...historyData.slice(0, 19)];
+    setHistoryData(updatedHistory);
+    setShowAnswer(true);
+    setIsAnswering(false);
+    setIsStealing(false);
 
     // If "removeAfterWin" is checked, remove student/group from current list
     let updatedNames = [...names];
@@ -2029,23 +2133,125 @@ export default function App() {
 
                 {isAnswering ? (
                   <div className="space-y-4 pt-2">
-                    <p className="text-xs uppercase tracking-widest font-bold text-slate-100">Đánh giá câu trả lời</p>
-                    <div className="flex flex-wrap gap-4 justify-center">
-                      <button
-                        onClick={() => handleScoring(true)}
-                        className="px-6 py-3 bg-white text-emerald-700 hover:bg-emerald-50 font-bold rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 cursor-pointer"
+                    {!isStealing ? (
+                      <>
+                        <p className="text-xs uppercase tracking-widest font-bold text-slate-100">Đánh giá câu trả lời</p>
+                        <div className="flex flex-wrap gap-3 justify-center">
+                          <button
+                            onClick={() => handleScoring(true)}
+                            className="px-5 py-3 bg-white text-emerald-700 hover:bg-emerald-50 font-extrabold rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 cursor-pointer text-sm"
+                          >
+                            <Check className="w-5 h-5" />
+                            ĐÚNG (+10 điểm)
+                          </button>
+                          <button
+                            onClick={() => handleScoring(false)}
+                            className="px-5 py-3 bg-rose-500 text-white hover:bg-rose-600 font-extrabold border border-rose-400 rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 cursor-pointer text-sm"
+                          >
+                            <X className="w-5 h-5" />
+                            SAI (0 điểm)
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsStealing(true);
+                              setStealName("");
+                            }}
+                            className="px-5 py-3 bg-amber-400 text-amber-950 hover:bg-amber-300 font-extrabold border border-amber-300 rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 cursor-pointer text-sm"
+                          >
+                            <Shuffle className="w-5 h-5" />
+                            MẤT LƯỢT / NHƯỜNG QUYỀN
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-slate-900/40 p-5 rounded-2xl border border-white/10 space-y-4 max-w-md mx-auto"
                       >
-                        <Check className="w-5 h-5" />
-                        ĐÚNG (+10 điểm)
-                      </button>
-                      <button
-                        onClick={() => handleScoring(false)}
-                        className="px-6 py-3 bg-rose-500 text-white hover:bg-rose-600 font-bold border border-rose-400 rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <X className="w-5 h-5" />
-                        SAI (0 điểm)
-                      </button>
-                    </div>
+                        <div className="text-center space-y-1">
+                          <p className="text-xs uppercase tracking-wider font-extrabold text-amber-300">💥 CHẾ ĐỘ CƯỚP ĐIỂM / NHƯỜNG QUYỀN</p>
+                          <p className="text-[11px] text-slate-200">{winnerName} bị mất lượt. Vui lòng nhập/chọn người trả lời thay:</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {/* Steal Input with suggestions */}
+                          <div className="relative">
+                            <input
+                              type="text"
+                              list="steal-suggestions"
+                              value={stealName}
+                              onChange={(e) => setStealName(e.target.value)}
+                              placeholder={wheelMode === 'student' ? "Nhập hoặc chọn tên học sinh..." : "Nhập hoặc chọn tên Đội/Nhóm..."}
+                              className="px-4 py-3 bg-white text-slate-800 rounded-xl border-2 border-amber-300 w-full text-center font-bold text-sm focus:outline-hidden focus:border-amber-400 placeholder:text-slate-400"
+                            />
+                            <datalist id="steal-suggestions">
+                              {wheelItems
+                                .filter(name => {
+                                  return name !== winnerName;
+                                })
+                                .map(name => (
+                                  <option key={name} value={name} />
+                                ))
+                              }
+                            </datalist>
+                          </div>
+
+                          {/* Quick selection tags */}
+                          <div className="space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-slate-300 text-left">Gợi ý nhanh:</p>
+                            <div className="flex flex-wrap gap-1.5 max-h-[70px] overflow-y-auto justify-start p-1 bg-white/5 rounded-lg border border-white/5">
+                              {wheelItems
+                                .filter(name => name !== winnerName)
+                                .slice(0, 10)
+                                .map(name => {
+                                  const displayName = name.includes(":") ? name.split(":")[0] : name;
+                                  return (
+                                    <button
+                                      key={name}
+                                      type="button"
+                                      onClick={() => setStealName(name)}
+                                      className="text-[11px] bg-white/10 hover:bg-white/20 text-white font-semibold py-1 px-2.5 rounded-lg transition duration-150 border border-white/5 cursor-pointer"
+                                    >
+                                      {displayName}
+                                    </button>
+                                  );
+                                })
+                              }
+                            </div>
+                          </div>
+
+                          {/* Score evaluations for the steeling user */}
+                          <div className="flex gap-2 justify-center pt-1">
+                            <button
+                              onClick={() => handleStealScoring(true)}
+                              disabled={!stealName.trim()}
+                              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                            >
+                              <Check className="w-4 h-4" />
+                              ĐÚNG (+10đ)
+                            </button>
+                            <button
+                              onClick={() => handleStealScoring(false)}
+                              disabled={!stealName.trim()}
+                              className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                            >
+                              <X className="w-4 h-4" />
+                              SAI (0đ)
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsStealing(false);
+                                setStealName("");
+                              }}
+                              className="py-2.5 px-3.5 bg-slate-600 hover:bg-slate-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm transition duration-150"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4 pt-2">
