@@ -1311,45 +1311,11 @@ export default function App() {
         >
           {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-rose-500" />}
         </button>
-
-        {isAdminLoggedIn ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsSettingsHidden(!isSettingsHidden)}
-              className={`px-4 py-2.5 rounded-full text-sm font-bold shadow-md flex items-center gap-2 transition duration-200 cursor-pointer ${
-                isSettingsHidden 
-                  ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
-                  : "bg-slate-600 hover:bg-slate-700 text-white"
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              {isSettingsHidden ? "Hiện Cài Đặt" : "Ẩn Cài Đặt"}
-            </button>
-            <button
-              onClick={handleAdminLogout}
-              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-sm font-bold shadow-md flex items-center gap-2 cursor-pointer transition duration-200"
-            >
-              <LogOut className="w-4 h-4" />
-              Đăng xuất
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => {
-              setShowLoginModal(true);
-              setLoginError(false);
-            }}
-            className="px-4 py-2.5 bg-white/90 border border-slate-200 hover:bg-slate-50 text-indigo-600 rounded-full text-sm font-bold shadow-md flex items-center gap-2 cursor-pointer transition duration-200"
-          >
-            <Lock className="w-4 h-4" />
-            Đăng nhập Admin
-          </button>
-        )}
       </div>
 
       {/* Hero Header */}
       <header className="pt-12 pb-6 text-center max-w-4xl mx-auto px-4">
-        <h1 className="font-display font-black text-4xl sm:text-6xl tracking-tight uppercase text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-pink-600 to-rose-600 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] mb-3">
+        <h1 className="font-display font-black text-3xl sm:text-5xl tracking-normal uppercase text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-pink-600 to-rose-600 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] py-2 mb-2 leading-tight">
           Vòng Quay May Mắn
         </h1>
         {/* Khung chữ chạy */}
@@ -1532,6 +1498,45 @@ export default function App() {
                 </span>
               )}
             </div>
+
+            {/* Divider */}
+            <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+
+            {/* Admin Authentication & Settings Controls */}
+            {isAdminLoggedIn ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsSettingsHidden(!isSettingsHidden)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition duration-200 cursor-pointer ${
+                    isSettingsHidden 
+                      ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
+                      : "bg-slate-600 hover:bg-slate-700 text-white"
+                  }`}
+                  title={isSettingsHidden ? "Hiện cài đặt admin" : "Ẩn cài đặt admin"}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  {isSettingsHidden ? "Hiện Cài Đặt" : "Ẩn Cài Đặt"}
+                </button>
+                <button
+                  onClick={handleAdminLogout}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition duration-200"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Đăng xuất
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setShowLoginModal(true);
+                  setLoginError(false);
+                }}
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-indigo-600 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition duration-200"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Đăng nhập Admin
+              </button>
+            )}
           </div>
         </div>
       </div>
