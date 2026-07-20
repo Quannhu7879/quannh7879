@@ -1998,9 +1998,27 @@ export default function App() {
                 <div className="absolute -top-12 -left-12 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
                 <div className="absolute -bottom-12 -right-12 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
 
-                <h3 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-wider text-amber-200 drop-shadow-md">
-                  🎉 {winnerName} 🎉
-                </h3>
+                {winnerName.includes(":") ? (
+                  (() => {
+                    const colonIndex = winnerName.indexOf(":");
+                    const groupPart = winnerName.substring(0, colonIndex + 1);
+                    const namesPart = winnerName.substring(colonIndex + 1);
+                    return (
+                      <h3 className="font-display font-black tracking-normal leading-normal drop-shadow-xs flex flex-col gap-2">
+                        <span className="text-2xl sm:text-3xl text-teal-950 uppercase tracking-wider drop-shadow-[0_1px_1px_rgba(255,255,255,0.3)]">
+                          🎉 {groupPart}
+                        </span>
+                        <span className="text-lg sm:text-xl text-red-600 bg-white/95 px-5 py-2.5 rounded-xl shadow-md border border-red-100 font-bold max-w-2xl mx-auto inline-block">
+                          {namesPart.trim()} 🎉
+                        </span>
+                      </h3>
+                    );
+                  })()
+                ) : (
+                  <h3 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-wider text-amber-200 drop-shadow-md">
+                    🎉 {winnerName} 🎉
+                  </h3>
+                )}
 
                 <div className="bg-white/15 backdrop-blur-xs rounded-xl p-4 border border-white/10 space-y-2">
                   <p className="text-xs uppercase tracking-widest font-bold text-amber-200">Câu Hỏi Bài Học</p>
