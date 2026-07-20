@@ -1372,7 +1372,8 @@ export default function App() {
 
       doc.addFileToVFS("Roboto-Regular.ttf", base64Font);
       doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
-      doc.setFont("Roboto");
+      doc.addFont("Roboto-Regular.ttf", "Roboto", "bold");
+      doc.setFont("Roboto", "normal");
 
       // Draw PDF Title
       doc.setFontSize(22);
@@ -1405,7 +1406,7 @@ export default function App() {
         head: [["STT", subjectLabel, "Tổng điểm số", "Số câu tham gia"]],
         body: scoreboardBody.length > 0 ? scoreboardBody : [["-", "Chưa có dữ liệu", "-", "-"]],
         styles: { font: "Roboto", fontSize: 10 },
-        headStyles: { font: "Roboto", fillColor: [79, 70, 229] },
+        headStyles: { font: "Roboto", fontStyle: "normal", fillColor: [79, 70, 229] },
         theme: "striped"
       });
 
@@ -1426,7 +1427,7 @@ export default function App() {
         head: [["Thời gian", "Người tham gia", "Kết quả", "Câu hỏi", "Đáp án"]],
         body: historyBody.length > 0 ? historyBody : [["-", "-", "-", "Chưa có lượt quay nào", "-"]],
         styles: { font: "Roboto", fontSize: 9 },
-        headStyles: { font: "Roboto", fillColor: [16, 185, 129] }, // Green primary
+        headStyles: { font: "Roboto", fontStyle: "normal", fillColor: [16, 185, 129] }, // Green primary
         theme: "grid"
       });
 
