@@ -1,0 +1,8 @@
+{
+  "name": "Vòng Quay May Mắn",
+  "description": "Ứng dụng tương tác lớp học Vòng Quay May Mắn, tích hợp AI tự động thiết kế câu hỏi trắc nghiệm thông minh, hỗ trợ nhập/xuất danh sách đa định dạng PDF, Excel, Word.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
