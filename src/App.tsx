@@ -13,6 +13,7 @@ import {
   X, 
   Eye, 
   FileText, 
+  User, 
   Download, 
   Users, 
   HelpCircle, 
@@ -21,7 +22,8 @@ import {
   Lock,
   ChevronLeft,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Save
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -82,6 +84,13 @@ export default function App() {
   // --- States ---
   const [names, setNames] = useState<string[]>(DEFAULT_STUDENTS);
   const [inputText, setInputText] = useState<string>(DEFAULT_STUDENTS.join("\n"));
+
+  // Team / Group States
+  const [groups, setGroups] = useState<string[]>(["Đội 1", "Đội 2", "Đội 3", "Đội 4"]);
+  const [groupInputText, setGroupInputText] = useState<string>("Đội 1\nĐội 2\nĐội 3\nĐội 4");
+  const [groupScores, setGroupScores] = useState<Record<string, StudentScore>>({});
+  const [wheelMode, setWheelMode] = useState<'student' | 'group'>('student');
+  const [setupTab, setSetupTab] = useState<'student' | 'group'>('student');
   
   const [topic, setTopic] = useState<string>("Kiến thức tổng hợp lớp 6");
   const [questionBankText, setQuestionBankText] = useState<string>(DEFAULT_QUESTIONS.join("\n"));
@@ -110,6 +119,9 @@ export default function App() {
   const [loginError, setLoginError] = useState<boolean>(false);
   const [isSettingsHidden, setIsSettingsHidden] = useState<boolean>(true); // Default guest mode has setting hidden
   const [activeTab, setActiveTab] = useState<"history" | "leaderboard">("history");
+
+  // Derived Values
+  const wheelItems = wheelMode === 'student' ? names : groups;
   
   // Loading state for AI generation
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
@@ -120,6 +132,7 @@ export default function App() {
   const [sessions, setSessions] = useState<{ id: string; topic: string; updated_at?: string }[]>([]);
   const [isTableMissing, setIsTableMissing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [showSaveSuccess, setShowSaveSuccess] = useState<boolean>(false);
   const [isLoadingSession, setIsLoadingSession] = useState<boolean>(false);
 
   // --- Fetch list of sessions from Supabase ---
@@ -160,10 +173,24 @@ export default function App() {
     customQBank = questionBankText,
     customRemove = removeAfterWin,
     customScores = studentScores,
-    customHistory = historyData
+    customHistory = historyData,
+    customGroups = groups,
+    customGroupInputText = groupInputText,
+    customGroupScores = groupScores,
+    customWheelMode = wheelMode
   ) => {
     setIsSaving(true);
     try {
+      const finalScores = {
+        ...customScores,
+        __groups_metadata: {
+          groups: customGroups,
+          groupInputText: customGroupInputText,
+          groupScores: customGroupScores,
+          wheelMode: customWheelMode
+        }
+      };
+
       const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,7 +199,7 @@ export default function App() {
           question_bank: customQBank,
           topic: customTopic,
           remove_after_win: customRemove,
-          student_scores: customScores,
+          student_scores: finalScores,
           history_data: customHistory
         })
       });
@@ -182,6 +209,8 @@ export default function App() {
       } else {
         setIsTableMissing(false);
         fetchSessions();
+        setShowSaveSuccess(true);
+        setTimeout(() => setShowSaveSuccess(false), 3000);
       }
     } catch (err) {
       console.error("Lỗi khi lưu dữ liệu lớp học:", err);
@@ -210,7 +239,33 @@ export default function App() {
         setTopic(s.topic || "");
         setQuestionBankText(s.question_bank || "");
         setRemoveAfterWin(s.remove_after_win !== false);
-        setStudentScores(s.student_scores || {});
+        
+        // Parse student_scores and extract groups metadata if present
+        const rawScores = s.student_scores || {};
+        const cleanedScores: Record<string, StudentScore> = {};
+        let loadedGroups: string[] = ["Đội 1", "Đội 2", "Đội 3", "Đội 4"];
+        let loadedGroupInputText: string = "Đội 1\nĐội 2\nĐội 3\nĐội 4";
+        let loadedGroupScores: Record<string, StudentScore> = {};
+        let loadedWheelMode: 'student' | 'group' = 'student';
+
+        Object.entries(rawScores).forEach(([key, val]) => {
+          if (key === "__groups_metadata") {
+            const meta = val as any;
+            if (meta.groups) loadedGroups = meta.groups;
+            if (meta.groupInputText) loadedGroupInputText = meta.groupInputText;
+            if (meta.groupScores) loadedGroupScores = meta.groupScores;
+            if (meta.wheelMode) loadedWheelMode = meta.wheelMode;
+          } else {
+            cleanedScores[key] = val as StudentScore;
+          }
+        });
+
+        setStudentScores(cleanedScores);
+        setGroups(loadedGroups);
+        setGroupInputText(loadedGroupInputText);
+        setGroupScores(loadedGroupScores);
+        setWheelMode(loadedWheelMode);
+
         setHistoryData(s.history_data || []);
         
         // Reset local quiz display
@@ -225,6 +280,10 @@ export default function App() {
         setQuestionBankText(DEFAULT_QUESTIONS.join("\n"));
         setRemoveAfterWin(true);
         setStudentScores({});
+        setGroups(["Đội 1", "Đội 2", "Đội 3", "Đội 4"]);
+        setGroupInputText("Đội 1\nĐội 2\nĐội 3\nĐội 4");
+        setGroupScores({});
+        setWheelMode('student');
         setHistoryData([]);
         
         await saveSession(sessionId, DEFAULT_STUDENTS, DEFAULT_STUDENTS.join("\n"), "Kiến thức tổng hợp lớp 6", DEFAULT_QUESTIONS.join("\n"), true, {}, []);
@@ -451,7 +510,7 @@ export default function App() {
 
     ctx.clearRect(0, 0, width, height);
 
-    if (names.length === 0) {
+    if (wheelItems.length === 0) {
       // Empty wheel placeholder
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
@@ -465,17 +524,21 @@ export default function App() {
       ctx.font = "bold 20px font-sans, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("Chưa có danh sách học sinh", centerX, centerY);
+      ctx.fillText(
+        wheelMode === "student" ? "Chưa có danh sách học sinh" : "Chưa có danh sách Đội/Nhóm",
+        centerX,
+        centerY
+      );
       return;
     }
 
-    const sliceAngle = (2 * Math.PI) / names.length;
+    const sliceAngle = (2 * Math.PI) / wheelItems.length;
 
     ctx.save();
     ctx.translate(centerX, centerY);
     ctx.rotate(rotationRef.current);
 
-    for (let i = 0; i < names.length; i++) {
+    for (let i = 0; i < wheelItems.length; i++) {
       const startAngle = i * sliceAngle;
       const endAngle = startAngle + sliceAngle;
 
@@ -498,11 +561,11 @@ export default function App() {
       
       // Responsive-ish font sizing based on slice size
       let fontSize = 20;
-      if (names.length > 20) fontSize = 13;
-      else if (names.length > 12) fontSize = 16;
+      if (wheelItems.length > 20) fontSize = 13;
+      else if (wheelItems.length > 12) fontSize = 16;
       ctx.font = `bold ${fontSize}px font-sans, sans-serif`;
 
-      let text = names[i];
+      let text = wheelItems[i];
       if (text.length > 18) {
         text = text.substring(0, 16) + "...";
       }
@@ -555,10 +618,10 @@ export default function App() {
     ctx.fill();
   };
 
-  // Re-draw wheel whenever students list modifies
+  // Re-draw wheel whenever students list or mode modifies
   useEffect(() => {
     drawWheel();
-  }, [names]);
+  }, [wheelItems]);
 
   // Handle window resizing to keep responsive structures stable
   useEffect(() => {
@@ -567,14 +630,14 @@ export default function App() {
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [names]);
+  }, [wheelItems]);
 
   // --- Wheel Spinning Action ---
   const spin = () => {
     initAudio();
     if (isSpinning) return;
-    if (names.length === 0) {
-      alert("Vui lòng cập nhật danh sách học sinh!");
+    if (wheelItems.length === 0) {
+      alert(wheelMode === 'student' ? "Vui lòng cập nhật danh sách học sinh!" : "Vui lòng cập nhật danh sách Đội/Nhóm!");
       return;
     }
 
@@ -590,10 +653,10 @@ export default function App() {
 
     const spinDuration = 4500 + Math.random() * 2000; // 4.5s to 6.5s
     const startRotation = rotationRef.current;
-    const sliceAngle = (2 * Math.PI) / names.length;
+    const sliceAngle = (2 * Math.PI) / wheelItems.length;
     
     // Choose winning index mathematical match
-    const winningIndex = Math.floor(Math.random() * names.length);
+    const winningIndex = Math.floor(Math.random() * wheelItems.length);
     const extraSpins = 6 + Math.floor(Math.random() * 5); // 6 to 10 full spins
     
     // Smooth natural-looking stopping position within slice range
@@ -625,7 +688,7 @@ export default function App() {
       if (pointerAngle < 0) pointerAngle += 2 * Math.PI;
       const currentSlice = Math.floor(pointerAngle / sliceAngle);
 
-      if (currentSlice !== lastTickSlice && currentSlice >= 0 && currentSlice < names.length) {
+      if (currentSlice !== lastTickSlice && currentSlice >= 0 && currentSlice < wheelItems.length) {
         playTickSound();
         lastTickSlice = currentSlice;
       }
@@ -644,7 +707,7 @@ export default function App() {
 
   // Finalize spin and draw Question from Bank
   const finishSpin = (winningIndex: number) => {
-    const winner = names[winningIndex];
+    const winner = wheelItems[winningIndex];
     setWinnerName(winner);
     setLastWinningIndex(winningIndex);
 
@@ -725,6 +788,64 @@ export default function App() {
       alert("Đã reset điểm số và lịch sử về ban đầu!");
       saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, {}, []);
     }
+  };
+
+  // --- Team / Group Action Helpers ---
+  const updateGroupsFromInput = () => {
+    const parsed = groupInputText.split("\n").map(n => n.trim()).filter(n => n !== "");
+    setGroups(parsed);
+    saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, parsed, parsed.join("\n"), groupScores, wheelMode);
+  };
+
+  const shuffleGroups = () => {
+    const arr = [...groups];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    setGroups(arr);
+    setGroupInputText(arr.join("\n"));
+    saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, arr, arr.join("\n"), groupScores, wheelMode);
+  };
+
+  const clearAllGroups = () => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ danh sách Đội/Nhóm?")) {
+      setGroups([]);
+      setGroupInputText("");
+      setLastRemovedPerson(null);
+      saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, [], "", groupScores, wheelMode);
+    }
+  };
+
+  const resetAllGroupScores = () => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ điểm số của tất cả Đội/Nhóm?")) {
+      setGroupScores({});
+      setHistoryData([]);
+      alert("Đã reset điểm số Đội/Nhóm và lịch sử về ban đầu!");
+      saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, [], groups, groupInputText, {}, wheelMode);
+    }
+  };
+
+  const autoGroupStudents = (numGroups: number) => {
+    if (names.length === 0) {
+      alert("Danh sách học sinh đang trống! Vui lòng thêm học sinh trước khi chia nhóm.");
+      return;
+    }
+    const shuffled = [...names].sort(() => Math.random() - 0.5);
+    const tempGroups: string[][] = Array.from({ length: numGroups }, () => []);
+    shuffled.forEach((n, idx) => {
+      tempGroups[idx % numGroups].push(n);
+    });
+    
+    const generated: string[] = [];
+    tempGroups.forEach((mems, i) => {
+      generated.push(`Nhóm ${i + 1}: ${mems.join(", ")}`);
+    });
+    setGroups(generated);
+    const txt = generated.join("\n");
+    setGroupInputText(txt);
+    saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, generated, txt, groupScores, wheelMode);
+    alert(`🎉 Đã chia ngẫu nhiên ${names.length} học sinh thành ${numGroups} Nhóm thành công!`);
   };
 
   // --- File Upload Parsers (Excel, Word, PDF) ---
@@ -935,20 +1056,34 @@ export default function App() {
     const pts = isCorrect ? 10 : 0;
     
     // Update Score
-    const updatedScores = {
-      ...studentScores,
-      [winnerName]: {
-        score: (studentScores[winnerName]?.score || 0) + pts,
-        count: (studentScores[winnerName]?.count || 0) + 1
-      }
-    };
-    setStudentScores(updatedScores);
+    let updatedScores = { ...studentScores };
+    let updatedGrpScores = { ...groupScores };
+
+    if (wheelMode === 'student') {
+      updatedScores = {
+        ...studentScores,
+        [winnerName]: {
+          score: (studentScores[winnerName]?.score || 0) + pts,
+          count: (studentScores[winnerName]?.count || 0) + 1
+        }
+      };
+      setStudentScores(updatedScores);
+    } else {
+      updatedGrpScores = {
+        ...groupScores,
+        [winnerName]: {
+          score: (groupScores[winnerName]?.score || 0) + pts,
+          count: (groupScores[winnerName]?.count || 0) + 1
+        }
+      };
+      setGroupScores(updatedGrpScores);
+    }
 
     // Record History
     const timeStr = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const ptsText = isCorrect ? "+10đ" : "0đ";
     const historyItem: HistoryItem = {
-      name: winnerName,
+      name: `${wheelMode === 'group' ? '👥 ' : ''}${winnerName}`,
       question: currentQuestion?.question || "N/A",
       answer: currentQuestion?.answer || "N/A",
       score: ptsText,
@@ -960,51 +1095,102 @@ export default function App() {
     setShowAnswer(true);
     setIsAnswering(false);
 
-    // If "removeAfterWin" is checked, remove student from current list
-    let updatedNames = names;
+    // If "removeAfterWin" is checked, remove student/group from current list
+    let updatedNames = [...names];
     let updatedInputText = inputText;
+    let updatedGroups = [...groups];
+    let updatedGroupInputText = groupInputText;
+
     if (removeAfterWin && lastWinningIndex !== -1) {
       setLastRemovedPerson(winnerName);
-      updatedNames = names.filter((_, idx) => idx !== lastWinningIndex);
-      setNames(updatedNames);
-      updatedInputText = updatedNames.join("\n");
-      setInputText(updatedInputText);
+      if (wheelMode === 'student') {
+        updatedNames = names.filter((_, idx) => idx !== lastWinningIndex);
+        setNames(updatedNames);
+        updatedInputText = updatedNames.join("\n");
+        setInputText(updatedInputText);
+      } else {
+        updatedGroups = groups.filter((_, idx) => idx !== lastWinningIndex);
+        setGroups(updatedGroups);
+        updatedGroupInputText = updatedGroups.join("\n");
+        setGroupInputText(updatedGroupInputText);
+      }
     } else {
       setLastRemovedPerson(null);
     }
 
     // Save to Supabase
-    saveSession(currentSessionId, updatedNames, updatedInputText, topic, questionBankText, removeAfterWin, updatedScores, updatedHistory);
+    saveSession(
+      currentSessionId,
+      updatedNames,
+      updatedInputText,
+      topic,
+      questionBankText,
+      removeAfterWin,
+      updatedScores,
+      updatedHistory,
+      updatedGroups,
+      updatedGroupInputText,
+      updatedGrpScores,
+      wheelMode
+    );
   };
 
   // Undo / Respin function (Hoàn tác)
   const handleUndo = () => {
     if (historyData.length === 0) return;
     const lastRecord = historyData[0];
+    const isGroupRecord = lastRecord.name.startsWith("👥 ");
+    const cleanName = isGroupRecord ? lastRecord.name.substring(2) : lastRecord.name;
 
-    // Re-adjust score
-    const record = studentScores[lastRecord.name];
     const scoreDelta = lastRecord.score.includes("+10") ? 10 : 0;
-    const updatedScores = {
-      ...studentScores,
-      [lastRecord.name]: {
-        score: record ? Math.max(0, record.score - scoreDelta) : 0,
-        count: record ? Math.max(0, record.count - 1) : 0
-      }
-    };
-    setStudentScores(updatedScores);
+
+    let updatedScores = { ...studentScores };
+    let updatedGrpScores = { ...groupScores };
+
+    if (!isGroupRecord) {
+      const record = studentScores[cleanName];
+      updatedScores = {
+        ...studentScores,
+        [cleanName]: {
+          score: record ? Math.max(0, record.score - scoreDelta) : 0,
+          count: record ? Math.max(0, record.count - 1) : 0
+        }
+      };
+      setStudentScores(updatedScores);
+    } else {
+      const record = groupScores[cleanName];
+      updatedGrpScores = {
+        ...groupScores,
+        [cleanName]: {
+          score: record ? Math.max(0, record.score - scoreDelta) : 0,
+          count: record ? Math.max(0, record.count - 1) : 0
+        }
+      };
+      setGroupScores(updatedGrpScores);
+    }
 
     // Restore student into the wheel if they were removed
-    let updatedNames = names;
+    let updatedNames = [...names];
     let updatedInputText = inputText;
-    if (lastRemovedPerson && lastRemovedPerson === lastRecord.name) {
-      const restored = [...names];
-      // Insert back to previous location or just append
-      restored.splice(lastWinningIndex, 0, lastRemovedPerson);
-      updatedNames = restored;
-      setNames(updatedNames);
-      updatedInputText = restored.join("\n");
-      setInputText(updatedInputText);
+    let updatedGroups = [...groups];
+    let updatedGroupInputText = groupInputText;
+
+    if (lastRemovedPerson && lastRemovedPerson === cleanName) {
+      if (!isGroupRecord) {
+        const restored = [...names];
+        restored.splice(lastWinningIndex, 0, lastRemovedPerson);
+        updatedNames = restored;
+        setNames(updatedNames);
+        updatedInputText = restored.join("\n");
+        setInputText(updatedInputText);
+      } else {
+        const restored = [...groups];
+        restored.splice(lastWinningIndex, 0, lastRemovedPerson);
+        updatedGroups = restored;
+        setGroups(updatedGroups);
+        updatedGroupInputText = restored.join("\n");
+        setGroupInputText(updatedGroupInputText);
+      }
       setLastRemovedPerson(null);
     }
 
@@ -1014,7 +1200,20 @@ export default function App() {
     setShowResultBox(false);
 
     // Save to Supabase
-    saveSession(currentSessionId, updatedNames, updatedInputText, topic, questionBankText, removeAfterWin, updatedScores, updatedHistory);
+    saveSession(
+      currentSessionId,
+      updatedNames,
+      updatedInputText,
+      topic,
+      questionBankText,
+      removeAfterWin,
+      updatedScores,
+      updatedHistory,
+      updatedGroups,
+      updatedGroupInputText,
+      updatedGrpScores,
+      wheelMode
+    );
   };
 
   // --- Export Data Flows ---
@@ -1315,7 +1514,7 @@ export default function App() {
 
       {/* Hero Header */}
       <header className="pt-12 pb-6 text-center max-w-4xl mx-auto px-4">
-        <h1 className="font-display font-black text-3xl sm:text-5xl tracking-normal uppercase text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-pink-600 to-rose-600 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] py-2 mb-2 leading-tight">
+        <h1 className="font-display font-black text-2xl sm:text-4xl tracking-normal uppercase text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-pink-600 to-rose-600 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] py-2 mb-2 leading-tight">
           Vòng Quay May Mắn
         </h1>
         {/* Khung chữ chạy */}
@@ -1499,44 +1698,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Divider */}
-            <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-
-            {/* Admin Authentication & Settings Controls */}
-            {isAdminLoggedIn ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsSettingsHidden(!isSettingsHidden)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition duration-200 cursor-pointer ${
-                    isSettingsHidden 
-                      ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
-                      : "bg-slate-600 hover:bg-slate-700 text-white"
-                  }`}
-                  title={isSettingsHidden ? "Hiện cài đặt admin" : "Ẩn cài đặt admin"}
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  {isSettingsHidden ? "Hiện Cài Đặt" : "Ẩn Cài Đặt"}
-                </button>
-                <button
-                  onClick={handleAdminLogout}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition duration-200"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Đăng xuất
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setShowLoginModal(true);
-                  setLoginError(false);
-                }}
-                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-indigo-600 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition duration-200"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                Đăng nhập Admin
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1554,88 +1715,220 @@ export default function App() {
               transition={{ type: "spring", stiffness: 100, damping: 15 }}
               className="lg:col-span-5 bg-white/90 backdrop-blur-md rounded-2xl p-6 border border-white/50 shadow-xl space-y-6"
             >
-              {/* List of Students Section */}
-              <div>
-                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-                  <h2 className="font-display font-bold text-lg text-indigo-700 flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Danh sách học sinh
-                  </h2>
-                  <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-mono">
-                    {names.length} người
-                  </span>
-                </div>
-
-                {/* Import File Button */}
-                <div className="mb-4">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    accept=".xlsx, .xls, .docx, .pdf"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  <button
-                    onClick={() => document.getElementById("file-upload")?.click()}
-                    disabled={isFileUploading}
-                    className="w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 border border-dashed border-indigo-300 text-indigo-700 font-semibold rounded-xl text-sm transition duration-150 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isFileUploading ? (
-                      <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
-                    ) : (
-                      <FolderDown className="w-4 h-4 text-indigo-500" />
-                    )}
-                    {isFileUploading ? "Đang xử lý file..." : "Nhập danh sách học sinh từ file (.xlsx, .docx, .pdf)"}
-                  </button>
-                  <p className="text-[11px] text-slate-500 text-center mt-1">
-                    Hỗ trợ file Excel, Word, hoặc PDF có chứa danh sách tên học sinh.
-                  </p>
-                </div>
-
-                {/* Textarea names input */}
-                <div className="space-y-2">
-                  <textarea
-                    rows={7}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Nhập tên học sinh, mỗi dòng 1 tên..."
-                    className="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-hidden text-sm font-medium transition duration-150"
-                  />
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={updateNamesFromInput}
-                      className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm cursor-pointer shadow-sm transition duration-150 flex items-center justify-center gap-1.5"
-                    >
-                      <Check className="w-4 h-4" />
-                      Cập nhật vòng
-                    </button>
-                    <button
-                      onClick={shuffleNames}
-                      className="py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm cursor-pointer shadow-sm transition duration-150 flex items-center justify-center gap-1.5"
-                    >
-                      <Shuffle className="w-4 h-4" />
-                      Trộn ngẫu nhiên
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <button
-                      onClick={clearAllNames}
-                      className="py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition duration-150 flex items-center justify-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Xóa toàn bộ học sinh
-                    </button>
-                    <button
-                      onClick={resetAllScores}
-                      className="py-2 bg-slate-500 hover:bg-slate-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition duration-150 flex items-center justify-center gap-1"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Xóa toàn bộ điểm số
-                    </button>
-                  </div>
-                </div>
+              {/* Tab Selector inside Setup Panel */}
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  onClick={() => setSetupTab('student')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    setupTab === 'student'
+                      ? "bg-white text-indigo-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  👤 HS Cá nhân
+                </button>
+                <button
+                  onClick={() => setSetupTab('group')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    setupTab === 'group'
+                      ? "bg-white text-rose-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  👥 Thiết lập Đội/Nhóm
+                </button>
               </div>
+
+              {setupTab === 'student' ? (
+                /* List of Students Section */
+                <div>
+                  <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                    <h2 className="font-display font-bold text-sm text-indigo-700 flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Danh sách học sinh
+                    </h2>
+                    <div className="flex items-center gap-1.5">
+                      {isSaving && (
+                        <span className="text-[10px] font-medium text-indigo-600 animate-pulse flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded-md">
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin text-indigo-500" /> Đang lưu...
+                        </span>
+                      )}
+                      {showSaveSuccess && (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-100 animate-bounce">
+                          <Check className="w-2.5 h-2.5 text-emerald-500" /> Đã lưu!
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-mono">
+                        {names.length} người
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Import File Button */}
+                  <div className="mb-4">
+                    <input
+                      type="file"
+                      id="file-upload"
+                      accept=".xlsx, .xls, .docx, .pdf"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                    <button
+                      onClick={() => document.getElementById("file-upload")?.click()}
+                      disabled={isFileUploading}
+                      className="w-full py-2.5 px-4 bg-indigo-50 hover:bg-indigo-100 border border-dashed border-indigo-300 text-indigo-700 font-semibold rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isFileUploading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                      ) : (
+                        <FolderDown className="w-4 h-4 text-indigo-500" />
+                      )}
+                      {isFileUploading ? "Đang xử lý file..." : "Nhập học sinh từ file (.xlsx, .docx, .pdf)"}
+                    </button>
+                  </div>
+
+                  {/* Textarea names input */}
+                  <div className="space-y-2">
+                    <textarea
+                      rows={6}
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onBlur={() => {
+                        const parsed = inputText.split("\n").map(n => n.trim()).filter(n => n !== "");
+                        setNames(parsed);
+                        saveSession(currentSessionId, parsed, parsed.join("\n"), topic, questionBankText, removeAfterWin, studentScores, historyData, groups, groupInputText, groupScores, wheelMode);
+                      }}
+                      placeholder="Nhập tên học sinh, mỗi dòng 1 tên..."
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-hidden text-sm font-medium transition duration-150"
+                    />
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={updateNamesFromInput}
+                        className="py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm transition duration-150 flex items-center justify-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Lưu & Cập nhật
+                      </button>
+                      <button
+                        onClick={shuffleNames}
+                        className="py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm transition duration-150 flex items-center justify-center gap-1.5"
+                      >
+                        <Shuffle className="w-3.5 h-3.5" />
+                        Trộn ngẫu nhiên
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button
+                        onClick={clearAllNames}
+                        className="py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs transition duration-150 flex items-center justify-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Xóa toàn bộ HS
+                      </button>
+                      <button
+                        onClick={resetAllScores}
+                        className="py-1.5 bg-slate-500 hover:bg-slate-600 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs transition duration-150 flex items-center justify-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Xóa toàn bộ điểm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Setup Teams/Groups Section */
+                <div>
+                  <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                    <h2 className="font-display font-bold text-sm text-rose-700 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-rose-500" />
+                      Cấu hình Đội/Nhóm
+                    </h2>
+                    <div className="flex items-center gap-1.5">
+                      {isSaving && (
+                        <span className="text-[10px] font-medium text-rose-600 animate-pulse flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md">
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin text-rose-500" /> Đang lưu...
+                        </span>
+                      )}
+                      {showSaveSuccess && (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-100 animate-bounce">
+                          <Check className="w-2.5 h-2.5 text-emerald-500" /> Đã lưu!
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-mono">
+                        {groups.length} nhóm
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Auto Grouping Tool block */}
+                  <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-3 mb-4 space-y-2">
+                    <p className="text-[11px] font-bold text-rose-800">⚡ CHIA NHÓM TỰ ĐỘNG TỪ HỌC SINH:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[2, 3, 4, 5, 6].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => autoGroupStudents(n)}
+                          className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg transition cursor-pointer"
+                        >
+                          Chia {n} Nhóm
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Group names Input Textarea */}
+                  <div className="space-y-2">
+                    <textarea
+                      rows={6}
+                      value={groupInputText}
+                      onChange={(e) => setGroupInputText(e.target.value)}
+                      onBlur={() => {
+                        const parsed = groupInputText.split("\n").map(n => n.trim()).filter(n => n !== "");
+                        setGroups(parsed);
+                        saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, parsed, parsed.join("\n"), groupScores, wheelMode);
+                      }}
+                      placeholder="Nhập tên Đội / Nhóm, mỗi dòng một tên..."
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-rose-500 focus:outline-hidden text-sm font-medium transition duration-150"
+                    />
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={updateGroupsFromInput}
+                        className="py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm transition duration-150 flex items-center justify-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Lưu & Cập nhật
+                      </button>
+                      <button
+                        onClick={shuffleGroups}
+                        className="py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm transition duration-150 flex items-center justify-center gap-1.5"
+                      >
+                        <Shuffle className="w-3.5 h-3.5" />
+                        Trộn ngẫu nhiên
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button
+                        onClick={clearAllGroups}
+                        className="py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs transition duration-150 flex items-center justify-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Xóa toàn bộ Nhóm
+                      </button>
+                      <button
+                        onClick={resetAllGroupScores}
+                        className="py-1.5 bg-slate-500 hover:bg-slate-600 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs transition duration-150 flex items-center justify-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Xóa toàn bộ điểm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Trivia Questions Configuration */}
               <div className="border-t border-slate-100 pt-5 space-y-4">
@@ -1718,7 +2011,7 @@ export default function App() {
 
                 {isAnswering ? (
                   <div className="space-y-4 pt-2">
-                    <p className="text-xs uppercase tracking-widest font-bold text-slate-100">Đánh giá câu trả lời của học sinh</p>
+                    <p className="text-xs uppercase tracking-widest font-bold text-slate-100">Đánh giá câu trả lời</p>
                     <div className="flex flex-wrap gap-4 justify-center">
                       <button
                         onClick={() => handleScoring(true)}
@@ -1762,6 +2055,36 @@ export default function App() {
             )}
           </AnimatePresence>
 
+          {/* Wheel Mode Select Buttons */}
+          <div className="flex bg-slate-200/80 p-1 rounded-2xl border border-slate-300/40 w-full max-w-[400px]">
+            <button
+              onClick={() => {
+                setWheelMode('student');
+                saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, groups, groupInputText, groupScores, 'student');
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+                wheelMode === 'student'
+                  ? "bg-indigo-600 text-white shadow-md scale-102"
+                  : "text-slate-600 hover:text-slate-800"
+              }`}
+            >
+              👤 Cá nhân học sinh
+            </button>
+            <button
+              onClick={() => {
+                setWheelMode('group');
+                saveSession(currentSessionId, names, inputText, topic, questionBankText, removeAfterWin, studentScores, historyData, groups, groupInputText, groupScores, 'group');
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+                wheelMode === 'group'
+                  ? "bg-rose-600 text-white shadow-md scale-102"
+                  : "text-slate-600 hover:text-slate-800"
+              }`}
+            >
+              👥 Đội / Nhóm
+            </button>
+          </div>
+
           {/* Quick remove checkbox */}
           <div className="flex items-center gap-3 bg-white/70 backdrop-blur-xs px-5 py-2.5 rounded-full border border-slate-200/60 shadow-sm">
             <input
@@ -1771,15 +2094,15 @@ export default function App() {
               onChange={(e) => {
                 const val = e.target.checked;
                 setRemoveAfterWin(val);
-                saveSession(currentSessionId, names, inputText, topic, questionBankText, val, studentScores, historyData);
+                saveSession(currentSessionId, names, inputText, topic, questionBankText, val, studentScores, historyData, groups, groupInputText, groupScores, wheelMode);
               }}
               className="w-5 h-5 text-indigo-600 rounded-md focus:ring-indigo-500 cursor-pointer"
             />
             <label htmlFor="remove-after-win" className="text-sm font-bold text-slate-700 cursor-pointer select-none">
-              Loại học sinh khỏi vòng quay sau khi trúng (tránh trùng lặp)
+              {wheelMode === 'student' ? 'Loại học sinh khỏi vòng quay sau khi trúng' : 'Loại đội/nhóm khỏi vòng quay sau khi trúng'}
             </label>
           </div>
-
+ 
           {/* Lucky Wheel Canvas Area */}
           <div className="relative flex items-center justify-center p-6 bg-white/50 backdrop-blur-xs rounded-3xl border border-white/60 shadow-lg w-full max-w-[620px] aspect-square">
             {/* Top Indicator Triangle Pin */}
@@ -1789,7 +2112,7 @@ export default function App() {
                 <path d="M23 35L4.82532 2.25L41.1747 2.25L23 35Z" fill="#E11D48" />
               </svg>
             </div>
-
+ 
             {/* Canvas Wheel element */}
             <canvas
               ref={canvasRef}
@@ -1797,11 +2120,11 @@ export default function App() {
               height={560}
               className="max-w-full h-auto rounded-full shadow-[0_15px_30px_rgba(0,0,0,0.15)] bg-white"
             />
-
+ 
             {/* Absolute Center Spin Button Over Wheel */}
             <button
               onClick={spin}
-              disabled={isSpinning || names.length === 0}
+              disabled={isSpinning || wheelItems.length === 0}
               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-4 border-white text-xl font-black uppercase text-rose-600 cursor-pointer shadow-xl z-20 flex flex-col items-center justify-center transition duration-200 hover:scale-105 active:scale-95 disabled:bg-slate-300 disabled:text-slate-500 disabled:border-slate-200 disabled:scale-100 disabled:cursor-not-allowed"
               style={{
                 background: "radial-gradient(circle, #ffeb3b, #fbc02d)"
@@ -1810,7 +2133,7 @@ export default function App() {
               <span className="drop-shadow-sm tracking-wider">QUAY!</span>
             </button>
           </div>
-
+ 
           {/* Admin Export/Undo Actions Buttons */}
           {isAdminLoggedIn && (
             <div className="flex flex-wrap gap-2 justify-center w-full max-w-[620px]">
@@ -1818,14 +2141,14 @@ export default function App() {
                 onClick={handleUndo}
                 disabled={historyData.length === 0 || isSpinning}
                 className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Trả học sinh vừa trúng lại vòng quay và hoàn tác điểm cộng"
+                title="Trả người vừa trúng lại vòng quay và hoàn tác điểm cộng"
               >
                 <RotateCcw className="w-4 h-4" />
                 Hoàn tác lượt quay
               </button>
               
               <div className="h-9 w-px bg-slate-300/60 mx-1 self-center" />
-
+ 
               <button
                 onClick={exportDataTXT}
                 className="px-4 py-2.5 bg-slate-600 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition duration-150 cursor-pointer"
@@ -1833,7 +2156,7 @@ export default function App() {
                 <FileText className="w-4 h-4" />
                 Xuất TXT
               </button>
-
+ 
               <button
                 onClick={exportDataPDF}
                 className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition duration-150 cursor-pointer"
@@ -1841,7 +2164,7 @@ export default function App() {
                 <Download className="w-4 h-4" />
                 Báo cáo PDF
               </button>
-
+ 
               <button
                 onClick={exportDataWord}
                 className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition duration-150 cursor-pointer"
@@ -1851,7 +2174,7 @@ export default function App() {
               </button>
             </div>
           )}
-
+ 
           {/* Tab lists (History & Leaderboard) */}
           <div className="w-full bg-white/70 backdrop-blur-md rounded-2xl p-5 border border-white/50 shadow-md">
             <div className="flex border-b border-slate-200/80 mb-4">
@@ -1875,10 +2198,10 @@ export default function App() {
                 }`}
               >
                 <Trophy className="w-4 h-4" />
-                🏆 Bảng điểm học sinh
+                {wheelMode === 'student' ? "🏆 Bảng điểm học sinh" : "🏆 Bảng điểm Đội / Nhóm"}
               </button>
             </div>
-
+ 
             {/* History Tab */}
             {activeTab === "history" && (
               <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
@@ -1922,7 +2245,7 @@ export default function App() {
                 )}
               </div>
             )}
-
+ 
             {/* Leaderboard Tab */}
             {activeTab === "leaderboard" && (
               <div className="max-h-[300px] overflow-y-auto pr-1">
@@ -1930,27 +2253,27 @@ export default function App() {
                   <thead>
                     <tr className="border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
                       <th className="py-2 pb-3">Thứ hạng</th>
-                      <th className="py-2 pb-3">Học sinh</th>
+                      <th className="py-2 pb-3">{wheelMode === 'student' ? 'Học sinh' : 'Đội / Nhóm'}</th>
                       <th className="py-2 pb-3 text-center">Tổng điểm số</th>
                       <th className="py-2 pb-3 text-center">Số câu tham gia</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.keys(studentScores).length === 0 ? (
+                    {Object.keys(wheelMode === 'student' ? studentScores : groupScores).length === 0 ? (
                       <tr>
                         <td colSpan={4} className="text-center py-8 text-slate-400 font-medium text-sm">
                           Chưa có điểm số nào được ghi nhận.
                         </td>
                       </tr>
                     ) : (
-                      (Object.entries(studentScores) as [string, StudentScore][])
+                      (Object.entries(wheelMode === 'student' ? studentScores : groupScores) as [string, StudentScore][])
                         .sort((a, b) => b[1].score - a[1].score)
                         .map(([name, data], idx) => {
                           let rankIcon = null;
                           if (idx === 0) rankIcon = "🥇";
                           else if (idx === 1) rankIcon = "🥈";
                           else if (idx === 2) rankIcon = "🥉";
-
+ 
                           return (
                             <tr key={name} className="border-b border-slate-100/70 hover:bg-slate-50/50 transition text-sm">
                               <td className="py-3 font-semibold text-slate-600 pl-2">
@@ -1976,14 +2299,55 @@ export default function App() {
         </div>
       </main>
 
-      {/* Footer Branding Credit */}
-      <footer className="mt-16 text-center max-w-lg mx-auto px-4 border-t border-slate-300/40 pt-6">
-        <p className="text-slate-600 text-sm font-semibold tracking-wide">
-          Thiết kế bởi: <strong className="text-indigo-600">Thầy Nghiêm Hồng Quân - Giáo viên Trường THCS Hòa Phú</strong>
-        </p>
-        <p className="text-slate-400 text-xs mt-1">
-          Ứng dụng tương tác lớp học Vòng Quay May Mắn kết hợp AI tự động ra đề câu hỏi.
-        </p>
+      {/* Footer Branding Credit & Admin Authentication */}
+      <footer className="mt-16 max-w-7xl mx-auto px-4">
+        <div className="bg-white/80 backdrop-blur-md border-2 border-indigo-100 rounded-3xl p-6 shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+          <div className="space-y-1">
+            <p className="text-slate-700 text-sm font-semibold tracking-wide flex items-center justify-center md:justify-start gap-1.5">
+              🎓 Thiết kế bởi: <strong className="text-indigo-600">Thầy Nghiêm Hồng Quân</strong> - Giáo viên Trường THCS Hòa Phú
+            </p>
+            <p className="text-slate-500 text-xs">
+              Ứng dụng tương tác lớp học Vòng Quay May Mắn kết hợp AI tự động ra đề câu hỏi.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            {isAdminLoggedIn ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsSettingsHidden(!isSettingsHidden)}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 transition duration-200 cursor-pointer ${
+                    isSettingsHidden 
+                      ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
+                      : "bg-slate-600 hover:bg-slate-700 text-white"
+                  }`}
+                  title={isSettingsHidden ? "Hiện cài đặt admin" : "Ẩn cài đặt admin"}
+                >
+                  <Settings className="w-4 h-4" />
+                  {isSettingsHidden ? "Hiện Cài Đặt" : "Ẩn Cài Đặt"}
+                </button>
+                <button
+                  onClick={handleAdminLogout}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer transition duration-200"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Đăng xuất
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setShowLoginModal(true);
+                  setLoginError(false);
+                }}
+                className="px-4 py-2 bg-white border-2 border-slate-200 hover:bg-slate-50 text-indigo-600 rounded-2xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer transition duration-200"
+              >
+                <Lock className="w-4 h-4" />
+                Đăng nhập Giáo Viên (Admin)
+              </button>
+            )}
+          </div>
+        </div>
       </footer>
 
       {/* Admin Password Login Modal */}
