@@ -26,6 +26,9 @@ import {
   Save
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType } from "docx";
 
 // Types
 interface StudentScore {
@@ -1325,10 +1328,12 @@ export default function App() {
     let output = "=== KẾT QUẢ VÒNG QUAY MAY MẮN ===\n";
     output += `Thời gian xuất: ${new Date().toLocaleString("vi-VN")}\n\n`;
     
-    output += "--- BẢNG ĐIỂM CHI TIẾT ---\n";
-    const entries = (Object.entries(studentScores) as [string, StudentScore][]).sort((a, b) => b[1].score - a[1].score);
+    const subjectLabel = wheelMode === 'student' ? "Học sinh" : "Đội / Nhóm";
+    output += `--- BẢNG ĐIỂM CHI TIẾT (${subjectLabel}) ---\n`;
+    const targetScores = wheelMode === 'student' ? studentScores : groupScores;
+    const entries = (Object.entries(targetScores) as [string, StudentScore][]).sort((a, b) => b[1].score - a[1].score);
     if (entries.length === 0) {
-      output += "Chưa có học sinh nào có điểm.\n";
+      output += `Chưa có ${subjectLabel.toLowerCase()} nào có điểm.\n`;
     } else {
       entries.forEach(([name, val], idx) => {
         output += `${idx + 1}. ${name} - Điểm: ${val.score}đ (Đã trả lời ${val.count} câu)\n`;
@@ -1356,14 +1361,7 @@ export default function App() {
   };
 
   const exportDataPDF = async () => {
-    const jspdfLib = (window as any).jspdf;
-    if (!jspdfLib) {
-      alert("Thư viện xuất PDF chưa sẵn sàng.");
-      return;
-    }
-
     try {
-      const { jsPDF } = jspdfLib;
       const doc = new jsPDF();
       
       // Load standard Vietnamese-supporting font Roboto via base64 for beautiful Vietnamese printing
@@ -1386,8 +1384,11 @@ export default function App() {
       doc.text(`Xuất lúc: ${new Date().toLocaleString("vi-VN")}`, 105, 27, { align: "center" });
       doc.text("Thiết kế bởi: Thầy Nghiêm Hồng Quân - Giáo viên Trường THCS Hòa Phú", 105, 32, { align: "center" });
 
+      const subjectLabel = wheelMode === 'student' ? "Học sinh" : "Đội / Nhóm";
+      const targetScores = wheelMode === 'student' ? studentScores : groupScores;
+
       // Build scoreboard data
-      const scoresSorted = (Object.entries(studentScores) as [string, StudentScore][]).sort((a, b) => b[1].score - a[1].score);
+      const scoresSorted = (Object.entries(targetScores) as [string, StudentScore][]).sort((a, b) => b[1].score - a[1].score);
       const scoreboardBody = scoresSorted.map(([name, data], idx) => [
         idx + 1,
         name,
@@ -1397,11 +1398,11 @@ export default function App() {
 
       doc.setFontSize(14);
       doc.setTextColor(17, 24, 39);
-      doc.text("1. BẢNG ĐIỂM XẾP HẠNG", 14, 45);
+      doc.text(`1. BẢNG ĐIỂM XẾP HẠNG (${subjectLabel.toUpperCase()})`, 14, 45);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: 50,
-        head: [["STT", "Học sinh", "Tổng điểm số", "Số câu tham gia"]],
+        head: [["STT", subjectLabel, "Tổng điểm số", "Số câu tham gia"]],
         body: scoreboardBody.length > 0 ? scoreboardBody : [["-", "Chưa có dữ liệu", "-", "-"]],
         styles: { font: "Roboto", fontSize: 10 },
         headStyles: { fillColor: [79, 70, 229] },
@@ -1420,9 +1421,9 @@ export default function App() {
         item.answer
       ]);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: nextStartY + 5,
-        head: [["Thời gian", "Học sinh", "Kết quả", "Câu hỏi", "Đáp án"]],
+        head: [["Thời gian", "Người tham gia", "Kết quả", "Câu hỏi", "Đáp án"]],
         body: historyBody.length > 0 ? historyBody : [["-", "-", "-", "Chưa có lượt quay nào", "-"]],
         styles: { font: "Roboto", fontSize: 9 },
         headStyles: { fillColor: [16, 185, 129] }, // Green primary
@@ -1437,23 +1438,18 @@ export default function App() {
   };
 
   const exportDataWord = async () => {
-    const docxLib = (window as any).docx;
-    if (!docxLib) {
-      alert("Thư viện xuất Word (docx) chưa sẵn sàng.");
-      return;
-    }
-
     try {
-      const { Document, Packer, Paragraph, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType } = docxLib;
+      const subjectLabel = wheelMode === 'student' ? "Học sinh" : "Đội / Nhóm";
+      const targetScores = wheelMode === 'student' ? studentScores : groupScores;
 
-      const scoresSorted = (Object.entries(studentScores) as [string, StudentScore][]).sort((a, b) => b[1].score - a[1].score);
+      const scoresSorted = (Object.entries(targetScores) as [string, StudentScore][]).sort((a, b) => b[1].score - a[1].score);
 
       // Score rows
       const scoreRows = [
         new TableRow({
           children: [
             new TableCell({ children: [new Paragraph({ text: "STT", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
-            new TableCell({ children: [new Paragraph({ text: "Học sinh", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
+            new TableCell({ children: [new Paragraph({ text: subjectLabel, alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
             new TableCell({ children: [new Paragraph({ text: "Tổng điểm", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
             new TableCell({ children: [new Paragraph({ text: "Số câu tham gia", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
           ]
@@ -1465,7 +1461,7 @@ export default function App() {
           new TableRow({
             children: [
               new TableCell({ children: [new Paragraph({ text: "-", alignment: AlignmentType.CENTER })] }),
-              new TableCell({ children: [new Paragraph({ text: "Chưa có dữ liệu học sinh", alignment: AlignmentType.CENTER })] }),
+              new TableCell({ children: [new Paragraph({ text: `Chưa có dữ liệu ${subjectLabel.toLowerCase()}`, alignment: AlignmentType.CENTER })] }),
               new TableCell({ children: [new Paragraph({ text: "-", alignment: AlignmentType.CENTER })] }),
               new TableCell({ children: [new Paragraph({ text: "-", alignment: AlignmentType.CENTER })] }),
             ]
@@ -1491,7 +1487,7 @@ export default function App() {
         new TableRow({
           children: [
             new TableCell({ children: [new Paragraph({ text: "Thời gian", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
-            new TableCell({ children: [new Paragraph({ text: "Học sinh", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
+            new TableCell({ children: [new Paragraph({ text: "Người tham gia", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
             new TableCell({ children: [new Paragraph({ text: "Kết quả", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
             new TableCell({ children: [new Paragraph({ text: "Câu hỏi", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
             new TableCell({ children: [new Paragraph({ text: "Đáp án", alignment: AlignmentType.CENTER })], shading: { fill: "F3F4F6" } }),
@@ -1559,7 +1555,7 @@ export default function App() {
                 spacing: { after: 400 }
               }),
               new Paragraph({
-                text: "1. BẢNG ĐIỂM CHI TIẾT",
+                text: `1. BẢNG ĐIỂM CHI TIẾT (${subjectLabel.toUpperCase()})`,
                 heading: HeadingLevel.HEADING_2,
                 spacing: { before: 200, after: 150 }
               }),
