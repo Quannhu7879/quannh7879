@@ -23,7 +23,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
-  Save
+  Save,
+  Calendar,
+  Clock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -124,6 +126,16 @@ export default function App() {
   const [loginError, setLoginError] = useState<boolean>(false);
   const [isSettingsHidden, setIsSettingsHidden] = useState<boolean>(true); // Default guest mode has setting hidden
   const [activeTab, setActiveTab] = useState<"history" | "leaderboard">("history");
+
+  // Live Date-Time State & Effect
+  const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Derived Values
   const wheelItems = wheelMode === 'student' ? names : groups;
@@ -1618,6 +1630,26 @@ export default function App() {
         <h1 className="font-display font-black text-2xl sm:text-4xl tracking-normal uppercase text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-pink-600 to-rose-600 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] py-2 mb-2 leading-tight">
           Vòng Quay May Mắn
         </h1>
+
+        {/* Live Clock & Date Widget */}
+        <div className="flex justify-center items-center gap-2 mb-4 flex-wrap text-xs sm:text-sm font-semibold">
+          <div className="bg-white/90 backdrop-blur-xs border-2 border-indigo-100 rounded-2xl px-4 py-2 shadow-sm flex items-center gap-2 text-slate-700">
+            <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>
+              {["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"][currentDateTime.getDay()]}, 
+              ngày {String(currentDateTime.getDate()).padStart(2, "0")} tháng {String(currentDateTime.getMonth() + 1).padStart(2, "0")} năm {currentDateTime.getFullYear()}
+            </span>
+          </div>
+          <div className="bg-indigo-600 border border-indigo-500 rounded-2xl px-4 py-2 shadow-sm flex items-center gap-2 text-white font-mono tracking-wider">
+            <Clock className="w-4 h-4 text-pink-300 animate-pulse shrink-0" />
+            <span>
+              {String(currentDateTime.getHours()).padStart(2, "0")}:
+              {String(currentDateTime.getMinutes()).padStart(2, "0")}:
+              <span className="text-pink-200">{String(currentDateTime.getSeconds()).padStart(2, "0")}</span>
+            </span>
+          </div>
+        </div>
+
         {/* Khung chữ chạy */}
         <div className="max-w-3xl mx-auto bg-gradient-to-r from-rose-50 to-pink-50 border-2 border-rose-200 rounded-2xl p-3.5 shadow-md overflow-hidden relative">
           <div className="w-full overflow-hidden whitespace-nowrap">
